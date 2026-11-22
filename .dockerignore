@@ -1,0 +1,5 @@
+*
+!cmd
+!go.mod
+!internal
+**/*_test.go

@@ -1,0 +1,27 @@
+---
+image:
+  repository: openbao-rotation-reminders
+  tag: e2e
+openbao:
+  address: https://openbao.openbao.svc:8200
+  mount: e2e
+  uiUrl: https://bao.example.com
+  tls:
+    caSecretName: openbao-ca
+ntfy:
+  url: http://ntfy.ntfy.svc
+  existingSecret: openbao-rotation-reminders-ntfy
+networkPolicy:
+  enabled: true
+  openbao:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: openbao
+  extraEgress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ntfy
+      ports:
+        - port: 80
+          protocol: TCP

@@ -1,0 +1,125 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "openbao-rotation-reminders.fullname" . }}
+  labels:
+    {{- include "openbao-rotation-reminders.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  {{- with .Values.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  concurrencyPolicy: {{ .Values.concurrencyPolicy }}
+  startingDeadlineSeconds: {{ .Values.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
+  suspend: {{ .Values.suspend }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "openbao-rotation-reminders.labels" . | nindent 8 }}
+    spec:
+      activeDeadlineSeconds: {{ .Values.activeDeadlineSeconds }}
+      backoffLimit: {{ .Values.backoffLimit }}
+      template:
+        metadata:
+          {{- with .Values.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          labels:
+            {{- include "openbao-rotation-reminders.labels" . | nindent 12 }}
+            {{- with .Values.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        spec:
+          serviceAccountName: {{ include "openbao-rotation-reminders.serviceAccountName" . }}
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.priorityClassName }}
+          priorityClassName: {{ . }}
+          {{- end }}
+          {{- with .Values.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: reminders
+              image: {{ include "openbao-rotation-reminders.image" . | quote }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              env:
+                - name: OPENBAO_ADDR
+                  value: {{ .Values.openbao.address | quote }}
+                - name: OPENBAO_MOUNT
+                  value: {{ .Values.openbao.mount | quote }}
+                - name: OPENBAO_K8S_ROLE
+                  value: {{ include "openbao-rotation-reminders.role" . | quote }}
+                - name: OPENBAO_JWT_FILE
+                  value: /var/run/secrets/openbao/token
+                {{- if .Values.openbao.tls.caSecretName }}
+                - name: OPENBAO_CA_FILE
+                  value: /etc/openbao/ca.crt
+                {{- end }}
+                {{- with .Values.openbao.uiUrl }}
+                - name: OPENBAO_UI_URL
+                  value: {{ . | quote }}
+                {{- end }}
+                - name: NTFY_URL
+                  value: {{ .Values.ntfy.url | quote }}
+                - name: NTFY_TOPIC
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.ntfy.existingSecret }}
+                      key: {{ .Values.ntfy.existingSecretKey }}
+                - name: DEFAULT_EXPIRES_WARN_BEFORE
+                  value: {{ .Values.reminders.defaultExpiresWarnBefore | quote }}
+              {{- with .Values.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              {{- with .Values.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              volumeMounts:
+                - name: openbao-token
+                  mountPath: /var/run/secrets/openbao
+                  readOnly: true
+                {{- if .Values.openbao.tls.caSecretName }}
+                - name: openbao-ca
+                  mountPath: /etc/openbao
+                  readOnly: true
+                {{- end }}
+          volumes:
+            - name: openbao-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      path: token
+                      audience: {{ .Values.openbao.auth.audience | quote }}
+                      expirationSeconds: {{ .Values.openbao.auth.tokenExpirationSeconds }}
+            {{- with .Values.openbao.tls.caSecretName }}
+            - name: openbao-ca
+              secret:
+                secretName: {{ . }}
+                items:
+                  - key: {{ $.Values.openbao.tls.caSecretKey }}
+                    path: ca.crt
+            {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

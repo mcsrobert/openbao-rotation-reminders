@@ -1,0 +1,5 @@
+---
+openbao:
+  address: https://openbao.security.svc.cluster.local:8200
+ntfy:
+  existingSecret: openbao-rotation-reminders-ntfy

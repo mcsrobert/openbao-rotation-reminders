@@ -1,0 +1,103 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao
+  namespace: openbao
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: openbao-token-review
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: openbao
+    namespace: openbao
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbao
+  namespace: openbao
+data:
+  config.hcl: |
+    listener "tcp" {
+      address       = "0.0.0.0:8200"
+      tls_cert_file = "/etc/openbao-tls/tls.crt"
+      tls_key_file  = "/etc/openbao-tls/tls.key"
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openbao
+  namespace: openbao
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openbao
+      component: server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openbao
+        component: server
+    spec:
+      serviceAccountName: openbao
+      containers:
+        - name: openbao
+          image: ghcr.io/openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
+          command:
+            - bao
+            - server
+            - -dev
+            - -dev-root-token-id=root
+            - -dev-listen-address=127.0.0.1:8210
+            - -dev-no-store-token
+            - -config=/etc/openbao-config/config.hcl
+          env:
+            - name: BAO_ADDR
+              value: http://127.0.0.1:8210
+            - name: BAO_TOKEN
+              value: root
+          ports:
+            - name: https
+              containerPort: 8200
+          readinessProbe:
+            httpGet:
+              path: /v1/sys/health
+              port: https
+              scheme: HTTPS
+          volumeMounts:
+            - name: config
+              mountPath: /etc/openbao-config
+              readOnly: true
+            - name: tls
+              mountPath: /etc/openbao-tls
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: openbao
+        - name: tls
+          secret:
+            secretName: openbao-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openbao
+  namespace: openbao
+spec:
+  selector:
+    app.kubernetes.io/name: openbao
+    component: server
+  ports:
+    - name: https
+      port: 8200
+      targetPort: https

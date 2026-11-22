@@ -1,0 +1,84 @@
+---
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: ghcr.io/mcsrobert/openbao-rotation-reminders
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+schedule: "0 9 * * *"
+timeZone: ""
+concurrencyPolicy: Forbid
+startingDeadlineSeconds: 300
+activeDeadlineSeconds: 600
+backoffLimit: 1
+successfulJobsHistoryLimit: 3
+failedJobsHistoryLimit: 3
+suspend: false
+
+openbao:
+  address: ""
+  mount: homelab
+  uiUrl: ""
+  auth:
+    role: ""
+    audience: openbao
+    tokenExpirationSeconds: 600
+  tls:
+    caSecretName: ""
+    caSecretKey: ca.crt
+
+ntfy:
+  url: https://ntfy.sh
+  existingSecret: ""
+  existingSecretKey: NTFY_TOPIC
+
+reminders:
+  defaultExpiresWarnBefore: 14d
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+networkPolicy:
+  enabled: false
+  openbao:
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: openbao
+        component: server
+    namespaceSelector: {}
+    port: 8200
+  extraEgress: []
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 64Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+podAnnotations: {}
+podLabels: {}
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
