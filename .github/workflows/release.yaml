@@ -79,45 +79,113 @@ jobs:
       - name: Find what this release already published
         id: published
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if raw=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --raw 2>&1); then
-            revision=$(yq --input-format json '.annotations["org.opencontainers.image.revision"]' <<< "${raw}")
-            if [[ "${revision}" != "${GITHUB_SHA}" ]]; then
-              echo "${IMAGE}:${VERSION} already exists, built from ${revision}"
-              exit 1
+          set -euo pipefail
+          directory=$(mktemp -d)
+          trap 'rm -rf "${directory}"' EXIT
+
+          lookup_tag() {
+            local repo="${1,,}"
+            local tag="$2"
+            local token code err_code digest
+            local auth="${directory}/auth"
+            local bearer="${directory}/bearer"
+            local headers="${directory}/headers"
+            local body="${directory}/body"
+
+            printf 'user = "%s:%s"\n' "${GITHUB_ACTOR}" "${GH_TOKEN}" > "${auth}"
+            token=$(curl --fail --silent --show-error \
+              --config "${auth}" \
+              "https://ghcr.io/token?service=ghcr.io&scope=repository:${repo}:pull" \
+              | yq --input-format json '.token') || return 1
+            if [[ -z "${token}" || "${token}" == "null" ]]; then
+              echo "Could not authenticate to ghcr.io for ${repo}" >&2
+              return 1
             fi
-            digest=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}' | yq --input-format json '.digest')
-            if [[ "${digest}" != sha256:* ]]; then
-              echo "Could not read the digest of ${IMAGE}:${VERSION}"
+
+            printf 'header = "Authorization: Bearer %s"\n' "${token}" > "${bearer}"
+            code=$(curl --silent --show-error \
+              --config "${bearer}" \
+              --dump-header "${headers}" \
+              --output "${body}" \
+              --write-out '%{http_code}' \
+              --header "Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json" \
+              "https://ghcr.io/v2/${repo}/manifests/${tag}") || return 1
+
+            if [[ "${code}" == "200" ]]; then
+              digest=$(tr -d '\r' < "${headers}" | awk 'tolower($1) == "docker-content-digest:" { print $2; exit }')
+              if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+                echo "Could not read the digest of ghcr.io/${repo}:${tag}" >&2
+                return 1
+              fi
+              printf '%s\n' "${digest}"
+              return 0
+            fi
+
+            if [[ "${code}" == "404" ]]; then
+              err_code=$(yq --input-format json '.errors[0].code // ""' "${body}" 2>/dev/null || true)
+              if [[ "${err_code}" == "MANIFEST_UNKNOWN" || "${err_code}" == "NAME_UNKNOWN" ]]; then
+                return 0
+              fi
+            fi
+
+            echo "Could not tell whether ghcr.io/${repo}:${tag} exists (HTTP ${code})" >&2
+            cat "${body}" >&2
+            return 1
+          }
+
+          verify_release_attestation() {
+            local subject="$1"
+            gh attestation verify "oci://${subject}" \
+              --repo "${REPOSITORY}" \
+              --signer-workflow "${REPOSITORY}/.github/workflows/release.yaml" \
+              --source-ref "refs/tags/${TAG}" \
+              --source-digest "${GITHUB_SHA}" \
+              --deny-self-hosted-runners
+          }
+
+          digest=$(lookup_tag "${IMAGE#ghcr.io/}" "${VERSION}")
+          if [[ -n "${digest}" ]]; then
+            if ! verify_release_attestation "${IMAGE}@${digest}"; then
+              echo "${IMAGE}:${VERSION}@${digest} already exists without a matching release attestation. If an earlier run failed before attesting it, delete that package version in GHCR and re-run."
               exit 1
             fi
             echo "Reusing ${IMAGE}:${VERSION}@${digest}"
             echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
-          elif [[ "${raw}" != *": not found"* ]]; then
-            echo "${raw}"
-            echo "Could not tell whether ${IMAGE}:${VERSION} exists"
-            exit 1
           fi
 
-          directory=$(mktemp -d)
-          if output=$(helm pull "oci://${CHART_REGISTRY}/${CHART_NAME}" --version "${VERSION}" --destination "${directory}" 2>&1); then
-            pinned=$(helm show values "${directory}/${CHART_NAME}-${VERSION}.tgz" | yq '.image.digest')
-            if [[ -z "${digest:-}" || "${pinned}" != "${digest}" ]]; then
-              echo "${CHART_REGISTRY}/${CHART_NAME}:${VERSION} already exists and pins ${pinned}"
+          chart_digest=$(lookup_tag "${CHART_REGISTRY#ghcr.io/}/${CHART_NAME}" "${VERSION}")
+          if [[ -n "${chart_digest}" ]]; then
+            if [[ -z "${digest}" ]]; then
+              echo "${CHART_REGISTRY}/${CHART_NAME}:${VERSION}@${chart_digest} already exists without a published image"
               exit 1
             fi
-            chart_digest=$(sed -n 's/^Digest: //p' <<< "${output}")
-            if [[ "${chart_digest}" != sha256:* ]]; then
-              echo "Could not read the chart digest"
+            if ! verify_release_attestation "${CHART_REGISTRY}/${CHART_NAME}@${chart_digest}"; then
+              echo "${CHART_REGISTRY}/${CHART_NAME}:${VERSION}@${chart_digest} already exists without a matching release attestation. If an earlier run failed before attesting it, delete that package version in GHCR and re-run."
+              exit 1
+            fi
+            mkdir -p "${directory}/chart"
+            if ! output=$(helm pull "oci://${CHART_REGISTRY}/${CHART_NAME}" --version "${VERSION}" --destination "${directory}/chart" 2>&1); then
+              echo "${output}"
+              echo "Could not pull existing ${CHART_REGISTRY}/${CHART_NAME}:${VERSION}@${chart_digest}"
+              exit 1
+            fi
+            pulled_digest=$(sed -n 's/^Digest: //p' <<< "${output}")
+            if [[ "${pulled_digest}" != "${chart_digest}" ]]; then
+              echo "Expected ${CHART_REGISTRY}/${CHART_NAME}:${VERSION} digest ${chart_digest}, got ${pulled_digest}"
+              exit 1
+            fi
+            pinned=$(helm show values "${directory}/chart/${CHART_NAME}-${VERSION}.tgz" | yq '.image.digest')
+            if [[ "${pinned}" != "${digest}" ]]; then
+              echo "${CHART_REGISTRY}/${CHART_NAME}:${VERSION} already exists and pins ${pinned}"
               exit 1
             fi
             echo "Reusing ${CHART_REGISTRY}/${CHART_NAME}:${VERSION}@${chart_digest}"
             echo "chart-digest=${chart_digest}" >> "${GITHUB_OUTPUT}"
-          elif [[ "${output}" != *": not found"* ]]; then
-            echo "${output}"
-            echo "Could not tell whether ${CHART_REGISTRY}/${CHART_NAME}:${VERSION} exists"
-            exit 1
           fi
       - name: Build and push
         id: build
@@ -138,10 +206,11 @@ jobs:
             index:org.opencontainers.image.version=${{ steps.version.outputs.version }}
             index:org.opencontainers.image.revision=${{ github.sha }}
       - name: Attest build provenance
+        if: steps.build.outputs.digest != ''
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.IMAGE }}
-          subject-digest: ${{ steps.build.outputs.digest || steps.published.outputs.digest }}
+          subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
       - name: Package the chart
         if: steps.published.outputs.chart-digest == ''
@@ -165,10 +234,11 @@ jobs:
           fi
           echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
       - name: Attest the chart's build provenance
+        if: steps.push-chart.outputs.digest != ''
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.CHART_REGISTRY }}/${{ env.CHART_NAME }}
-          subject-digest: ${{ steps.push-chart.outputs.digest || steps.published.outputs.chart-digest }}
+          subject-digest: ${{ steps.push-chart.outputs.digest }}
           push-to-registry: true
 
   verify:
@@ -269,9 +339,13 @@ jobs:
           VERSION: ${{ needs.publish.outputs.version }}
         run: |
           changelog=$(gh release view "${TAG}" --repo "${REPOSITORY}" --json body --jq .body)
-          notes="Image: \`${IMAGE}:${VERSION}@${DIGEST}\`
+          header="Image: \`${IMAGE}:${VERSION}@${DIGEST}\`
 
-          Chart: \`oci://${CHART_REGISTRY}/${CHART_NAME}:${VERSION}@${CHART_DIGEST}\`
+          Chart: \`oci://${CHART_REGISTRY}/${CHART_NAME}:${VERSION}@${CHART_DIGEST}\`"
+          if [[ "${changelog}" == "${header}"* ]]; then
+            exit 0
+          fi
+          notes="${header}
 
           ${changelog}"
           gh release edit "${TAG}" --repo "${REPOSITORY}" --notes "${notes}"

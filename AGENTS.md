@@ -65,8 +65,11 @@ mise run test:e2e      # needs Docker
 - Do not edit `CHANGELOG.md`, `.release-please-manifest.json` or the versions
   in `Chart.yaml`. Release-please maintains them.
 - If the release workflow fails after publishing part of a release, re-run
-  the failed jobs. It reuses an image or chart that the same commit already
-  published and refuses any other existing version.
+  the failed jobs. It reuses an attested image or chart that this workflow
+  already published from the same commit and refuses any other existing
+  version. If an earlier run failed after pushing an image or chart but before
+  attesting it, delete that unattested package version in GHCR before
+  re-running.
 - GHCR creates new packages as private, so the first release's anonymous
   verification fails. Make the image and chart packages public, then re-run
   the failed jobs.
