@@ -3,7 +3,7 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "openbao-rotation-reminders.fullname" . }}
+  name: {{ include "openbao-rotation-reminders.fullname" . | quote }}
   labels:
     {{- include "openbao-rotation-reminders.labels" . | nindent 4 }}
 spec:

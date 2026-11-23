@@ -150,6 +150,41 @@ expect_equal "public HTTPS egress" \
 expect_equal "no extra egress" "$(policy '.spec.egress | length')" "3"
 expect_equal "extra egress" "$(policy '.spec.egress[3].ports[0].port' --set 'networkPolicy.extraEgress[0].ports[0].port=80')" "80"
 
+names() {
+  helm template "$@" "${chart}" --namespace "${namespace}" --values "${values}" \
+    | yq --no-doc '[.metadata.name, .spec.jobTemplate.spec.template.spec.serviceAccountName // "", (.spec.jobTemplate.spec.template.spec.containers[0].env[] | select(.name == "OPENBAO_K8S_ROLE") | .value) // ""] | map(select(. != "")) | join(",")' \
+    | paste -sd, -
+}
+long_name=production-rotation-reminder-openbao-rotation-remind
+expect_equal "names of a long release" "$(names production-rotation-reminder)" \
+  "${long_name},${long_name},${long_name},${long_name}"
+expect_equal "names with a long override" \
+  "$(names "${release}" --set fullnameOverride="$(printf 'a%.0s' {1..60})")" \
+  "$(printf 'a%.0s' {1..52} | sed 's/.*/&,&,&,&/')"
+
+pod_labels() {
+  cronjob "${pod%.spec}.metadata.labels | to_entries | map(.key + \"=\" + .value) | join(\",\")" "$@"
+}
+expect_equal "pod labels" \
+  "$(pod_labels --set podLabels.team=platform --set-string podLabels.app\\.kubernetes\\.io/version=custom)" \
+  "app.kubernetes.io/instance=${release},app.kubernetes.io/managed-by=Helm,app.kubernetes.io/name=openbao-rotation-reminders,app.kubernetes.io/version=custom,helm.sh/chart=openbao-rotation-reminders-$(yq '.version' "${chart}/Chart.yaml"),team=platform"
+
+numeric=(
+  --set-string ntfy.existingSecret=1234
+  --set-string ntfy.existingSecretKey=1
+  --set-string openbao.tls.caSecretName=5678
+  --set-string openbao.tls.caSecretKey=2
+  --set-string priorityClassName=10
+)
+helm template 1234 "${chart}" --namespace "${namespace}" --values "${values}" "${numeric[@]}" \
+  | kubeconform -strict -summary -schema-location default
+expect_equal "numeric Secret names" "$(env NTFY_TOPIC "${numeric[@]}")" "1234/1"
+
+for mount in .hidden/kv team/..kv /homelab/; do
+  helm template "${release}" "${chart}" --namespace "${namespace}" --values "${values}" --set "openbao.mount=${mount}" > /dev/null \
+    || fail "the chart rejected the mount ${mount}"
+done
+
 expect_rejected "missing values"
 expect_rejected "an unknown value" --values "${values}" --set unknown=true
 expect_rejected "an unknown OpenBao field" --values "${values}" --set openbao.unknown=true
@@ -157,6 +192,10 @@ expect_rejected "a missing address" --values "${values}" --set openbao.address=
 expect_rejected "an address with a query" --values "${values}" --set 'openbao.address=https://openbao?x=1'
 expect_rejected "an address with credentials" --values "${values}" --set 'openbao.address=https://user:pass@openbao'
 expect_rejected "an empty mount" --values "${values}" --set openbao.mount=
+for mount in . .. team/../kv team/./kv team/..; do
+  expect_rejected "the mount ${mount}" --values "${values}" --set "openbao.mount=${mount}"
+done
+expect_rejected "a pod label that selects the release" --values "${values}" --set podLabels.app\\.kubernetes\\.io/instance=other
 expect_rejected "a missing ntfy secret" --values "${values}" --set ntfy.existingSecret=
 expect_rejected "an ntfy URL with a scheme other than https or http" --values "${values}" --set ntfy.url=ftp://ntfy.sh
 expect_rejected "a UI URL with a scheme other than https or http" --values "${values}" --set 'openbao.uiUrl=javascript:alert(1)'
