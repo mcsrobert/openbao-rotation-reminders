@@ -330,7 +330,7 @@ func TestRunConfigurationErrors(t *testing.T) {
 		want   string
 	}{
 		{"missing address", map[string]string{"OPENBAO_ADDR": ""}, "configuration error: OPENBAO_ADDR: required\n"},
-		{"invalid topic", map[string]string{"NTFY_TOPIC": topic + "?x=1"}, "configuration error: NTFY_TOPIC is empty or contains invalid characters\n"},
+		{"invalid topic", map[string]string{"NTFY_TOPIC": topic + "?x=1"}, "configuration error: NTFY_TOPIC must be 1 to 64 letters, digits, hyphens or underscores\n"},
 		{"missing CA file", map[string]string{"OPENBAO_CA_FILE": "/nonexistent/ca.crt"}, "configuration error: OPENBAO_CA_FILE: read CA file: open /nonexistent/ca.crt: no such file or directory\n"},
 	}
 	for _, test := range tests {
