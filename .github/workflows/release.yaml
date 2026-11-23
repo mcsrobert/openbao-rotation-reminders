@@ -28,8 +28,8 @@ jobs:
       id-token: write
       packages: write
     outputs:
-      chart-digest: ${{ steps.push-chart.outputs.digest }}
-      digest: ${{ steps.build.outputs.digest }}
+      chart-digest: ${{ steps.push-chart.outputs.digest || steps.published.outputs.chart-digest }}
+      digest: ${{ steps.build.outputs.digest || steps.published.outputs.digest }}
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
@@ -76,20 +76,52 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: helm registry login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin <<< "${GH_TOKEN}"
-      - name: Refuse to overwrite a published version
+      - name: Find what this release already published
+        id: published
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if docker buildx imagetools inspect "${IMAGE}:${VERSION}" > /dev/null 2>&1; then
-            echo "${IMAGE}:${VERSION} already exists"
+          if raw=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --raw 2>&1); then
+            revision=$(yq --input-format json '.annotations["org.opencontainers.image.revision"]' <<< "${raw}")
+            if [[ "${revision}" != "${GITHUB_SHA}" ]]; then
+              echo "${IMAGE}:${VERSION} already exists, built from ${revision}"
+              exit 1
+            fi
+            digest=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}' | yq --input-format json '.digest')
+            if [[ "${digest}" != sha256:* ]]; then
+              echo "Could not read the digest of ${IMAGE}:${VERSION}"
+              exit 1
+            fi
+            echo "Reusing ${IMAGE}:${VERSION}@${digest}"
+            echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          elif [[ "${raw}" != *": not found"* ]]; then
+            echo "${raw}"
+            echo "Could not tell whether ${IMAGE}:${VERSION} exists"
             exit 1
           fi
-          if helm show chart "oci://${CHART_REGISTRY}/${CHART_NAME}" --version "${VERSION}" > /dev/null 2>&1; then
-            echo "${CHART_REGISTRY}/${CHART_NAME}:${VERSION} already exists"
+
+          directory=$(mktemp -d)
+          if output=$(helm pull "oci://${CHART_REGISTRY}/${CHART_NAME}" --version "${VERSION}" --destination "${directory}" 2>&1); then
+            pinned=$(helm show values "${directory}/${CHART_NAME}-${VERSION}.tgz" | yq '.image.digest')
+            if [[ -z "${digest:-}" || "${pinned}" != "${digest}" ]]; then
+              echo "${CHART_REGISTRY}/${CHART_NAME}:${VERSION} already exists and pins ${pinned}"
+              exit 1
+            fi
+            chart_digest=$(sed -n 's/^Digest: //p' <<< "${output}")
+            if [[ "${chart_digest}" != sha256:* ]]; then
+              echo "Could not read the chart digest"
+              exit 1
+            fi
+            echo "Reusing ${CHART_REGISTRY}/${CHART_NAME}:${VERSION}@${chart_digest}"
+            echo "chart-digest=${chart_digest}" >> "${GITHUB_OUTPUT}"
+          elif [[ "${output}" != *": not found"* ]]; then
+            echo "${output}"
+            echo "Could not tell whether ${CHART_REGISTRY}/${CHART_NAME}:${VERSION} exists"
             exit 1
           fi
       - name: Build and push
         id: build
+        if: steps.published.outputs.digest == ''
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -109,16 +141,18 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.IMAGE }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-digest: ${{ steps.build.outputs.digest || steps.published.outputs.digest }}
           push-to-registry: true
       - name: Package the chart
+        if: steps.published.outputs.chart-digest == ''
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.build.outputs.digest || steps.published.outputs.digest }}
         run: |
           yq --inplace '.image.digest = strenv(DIGEST)' "charts/${CHART_NAME}/values.yaml"
           helm package "charts/${CHART_NAME}" --destination "${RUNNER_TEMP}/chart"
       - name: Push the chart
         id: push-chart
+        if: steps.published.outputs.chart-digest == ''
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -134,7 +168,7 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.CHART_REGISTRY }}/${{ env.CHART_NAME }}
-          subject-digest: ${{ steps.push-chart.outputs.digest }}
+          subject-digest: ${{ steps.push-chart.outputs.digest || steps.published.outputs.chart-digest }}
           push-to-registry: true
 
   verify:
@@ -156,7 +190,10 @@ jobs:
           VERSION: ${{ needs.publish.outputs.version }}
         run: |
           docker logout ghcr.io || true
-          docker pull "${IMAGE}@${DIGEST}"
+          if ! docker pull "${IMAGE}@${DIGEST}"; then
+            echo "Could not pull ${IMAGE} anonymously. After the first release, make the package public and re-run this job."
+            exit 1
+          fi
           actual=$(docker run --rm "${IMAGE}@${DIGEST}" --version)
           if [[ "${actual}" != "${VERSION}" ]]; then
             echo "Expected ${VERSION}, got ${actual}"
@@ -194,7 +231,11 @@ jobs:
           VERSION: ${{ needs.publish.outputs.version }}
         run: |
           directory=$(mktemp -d)
-          output=$(helm pull "oci://${CHART_REGISTRY}/${CHART_NAME}" --version "${VERSION}" --destination "${directory}" 2>&1)
+          if ! output=$(helm pull "oci://${CHART_REGISTRY}/${CHART_NAME}" --version "${VERSION}" --destination "${directory}" 2>&1); then
+            echo "${output}"
+            echo "Could not pull the chart anonymously. After the first release, make the package public and re-run this job."
+            exit 1
+          fi
           echo "${output}"
           if [[ "$(sed -n 's/^Digest: //p' <<< "${output}")" != "${CHART_DIGEST}" ]]; then
             echo "Expected chart digest ${CHART_DIGEST}"
