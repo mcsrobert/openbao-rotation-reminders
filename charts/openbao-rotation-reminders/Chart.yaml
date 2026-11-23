@@ -3,8 +3,8 @@ apiVersion: v2
 name: openbao-rotation-reminders
 description: Daily ntfy digest of OpenBao KV v2 secrets due for rotation
 type: application
-version: 0.0.0 # x-release-please-version
-appVersion: "0.0.0" # x-release-please-version
+version: 1.0.0 # x-release-please-version
+appVersion: "1.0.0" # x-release-please-version
 home: https://github.com/mcsrobert/openbao-rotation-reminders
 sources:
   - https://github.com/mcsrobert/openbao-rotation-reminders
