@@ -38,10 +38,12 @@ The job logs in with a projected service account token for the audience in
 mounted. The OpenBao Kubernetes auth role must use the same audience and bind
 the release's service account and namespace. By default, the role and the
 service account are both named after the release: `openbao-rotation-reminders`
-for that release name, or `<release>-openbao-rotation-reminders` otherwise, cut
-to 52 characters, the limit for a `CronJob` name. With
-`serviceAccount.create=false`, set `serviceAccount.name` to the account the
-role binds, because the job otherwise runs as `default`.
+for that release name, or `<release>-openbao-rotation-reminders` otherwise,
+shortened with a hash suffix to 52 characters, the limit for a `CronJob` name
+(render with `helm template` to see the shortened name, or set
+`openbao.auth.role` explicitly). With `serviceAccount.create=false`, set
+`serviceAccount.name` to the account the role binds, because the job otherwise
+runs as `default`.
 
 To run a check now:
 

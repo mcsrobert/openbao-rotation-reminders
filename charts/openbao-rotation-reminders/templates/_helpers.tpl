@@ -1,17 +1,27 @@
 {{- define "openbao-rotation-reminders.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- regexReplaceAll "[-._]+$" (default .Chart.Name .Values.nameOverride | trunc 63) "" -}}
 {{- end -}}
 
 {{- define "openbao-rotation-reminders.fullname" -}}
-{{- if .Values.fullnameOverride -}}
-{{- .Values.fullnameOverride | trunc 52 | trimSuffix "-" -}}
-{{- else -}}
+{{- $full := .Values.fullnameOverride -}}
+{{- if not $full -}}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
 {{- if contains $name .Release.Name -}}
-{{- .Release.Name | trunc 52 | trimSuffix "-" -}}
+{{- $full = .Release.Name -}}
 {{- else -}}
-{{- printf "%s-%s" .Release.Name $name | trunc 52 | trimSuffix "-" -}}
+{{- $full = printf "%s-%s" .Release.Name $name -}}
 {{- end -}}
+{{- end -}}
+{{- if gt (len $full) 52 -}}
+{{- $hash := sha256sum $full | trunc 8 -}}
+{{- $prefix := regexReplaceAll "[-.]+$" ($full | trunc 43) "" -}}
+{{- if $prefix -}}
+{{- printf "%s-%s" $prefix $hash -}}
+{{- else -}}
+{{- $hash -}}
+{{- end -}}
+{{- else -}}
+{{- regexReplaceAll "[-.]+$" $full "" -}}
 {{- end -}}
 {{- end -}}
 
@@ -21,16 +31,16 @@ app.kubernetes.io/instance: {{ .Release.Name | quote }}
 {{- end -}}
 
 {{- define "openbao-rotation-reminders.labels" -}}
-helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" | quote }}
+helm.sh/chart: {{ regexReplaceAll "[-._]+$" (printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63) "" | quote }}
 {{ include "openbao-rotation-reminders.selectorLabels" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
 {{- end -}}
 
 {{- define "openbao-rotation-reminders.podLabels" -}}
-{{- $selector := include "openbao-rotation-reminders.selectorLabels" . | fromYaml -}}
 {{- $labels := include "openbao-rotation-reminders.labels" . | fromYaml -}}
-{{- toYaml (merge $selector (deepCopy .Values.podLabels) $labels) -}}
+{{- $selector := include "openbao-rotation-reminders.selectorLabels" . | fromYaml -}}
+{{- toYaml (mergeOverwrite $labels (deepCopy (default dict .Values.podLabels)) $selector) -}}
 {{- end -}}
 
 {{- define "openbao-rotation-reminders.serviceAccountName" -}}
