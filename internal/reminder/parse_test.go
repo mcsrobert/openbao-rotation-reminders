@@ -60,6 +60,9 @@ func TestParseTimestamp(t *testing.T) {
 		{value: "2027-03-01T00:00:00.5", err: "must include a timezone"},
 		{value: "2027-03-01", err: `invalid timestamp "2027-03-01"`},
 		{value: "2027-02-30T00:00:00Z", err: "invalid timestamp"},
+		{value: "2027-03-01T00:00:00+23:59", want: time.Date(2027, 2, 28, 0, 1, 0, 0, time.UTC)},
+		{value: "2099-03-01T12:00:00+00:60", err: `invalid timestamp "2099-03-01T12:00:00+00:60"`},
+		{value: "2099-03-01T12:00:00-24:00", err: "invalid timestamp"},
 		{value: "tomorrow", err: "invalid timestamp"},
 	}
 	for _, test := range tests {

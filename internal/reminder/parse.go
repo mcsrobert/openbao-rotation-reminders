@@ -48,13 +48,25 @@ func ParseTimestamp(value string) (time.Time, error) {
 		text = strings.TrimSuffix(text, "z") + "Z"
 	}
 	parsed, err := time.Parse(time.RFC3339Nano, text)
-	if err == nil {
+	if err == nil && validOffset(text) {
 		return parsed.UTC(), nil
 	}
 	if _, err := time.Parse("2006-01-02T15:04:05.999999999", text); err == nil {
 		return time.Time{}, fmt.Errorf("timestamp %q must include a timezone (e.g. Z or +00:00)", value)
 	}
 	return time.Time{}, fmt.Errorf("invalid timestamp %q (use RFC3339, e.g. 2027-03-01T00:00:00Z)", value)
+}
+
+// validOffset reports whether the numeric offset that ends a timestamp, if
+// any, is within RFC 3339's 00:00 to 23:59. time.Parse normalizes offsets such
+// as +00:60 instead of rejecting them.
+func validOffset(text string) bool {
+	if len(text) < 6 || (text[len(text)-6] != '+' && text[len(text)-6] != '-') {
+		return true
+	}
+	hours, hoursErr := strconv.Atoi(text[len(text)-5 : len(text)-3])
+	minutes, minutesErr := strconv.Atoi(text[len(text)-2:])
+	return hoursErr == nil && minutesErr == nil && hours <= 23 && minutes <= 59
 }
 
 // ParseExpiresAt parses a date, YYYY-MM-DD at midnight UTC, or an RFC 3339
