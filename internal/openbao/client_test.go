@@ -52,6 +52,13 @@ func newClient(t *testing.T, address string) *Client {
 	return client
 }
 
+// notFound responds like OpenBao does for a missing key or an empty
+// directory.
+func notFound(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = io.WriteString(w, `{"errors":[]}`)
+}
+
 func login(tokenType string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/auth/kubernetes/login" {
@@ -191,7 +198,7 @@ func TestListKeys(t *testing.T) {
 		}
 		listing, ok := listings[r.URL.EscapedPath()]
 		if !ok {
-			http.NotFound(w, r)
+			notFound(w, r)
 			return
 		}
 		_, _ = io.WriteString(w, listing)
@@ -210,10 +217,49 @@ func TestListKeys(t *testing.T) {
 }
 
 func TestListKeysOfAnEmptyMount(t *testing.T) {
-	server, _ := serve(t, http.NotFound)
+	server, _ := serve(t, notFound)
 	keys, err := newClient(t, server.URL).ListKeys(t.Context())
 	if err != nil || len(keys) != 0 {
 		t.Fatalf("keys = %q, error = %v", keys, err)
+	}
+}
+
+func TestListKeysRejectsOtherNotFoundResponses(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"missing mount", `{"errors":["no handler for route \"kv/homelab/metadata/\". route entry not found."]}`},
+		{"no errors array", `{}`},
+		{"not JSON", "404 page not found"},
+		{"empty", ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server, _ := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = io.WriteString(w, test.body)
+			})
+			_, err := newClient(t, server.URL).ListKeys(t.Context())
+			want := "HTTP 404 calling GET /v1/kv/homelab/metadata/: no such route, check OPENBAO_ADDR and OPENBAO_MOUNT"
+			if err == nil || err.Error() != want {
+				t.Fatalf("error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
+func TestListKeysRejectsAListingWithoutKeys(t *testing.T) {
+	for _, body := range []string{`{}`, `{"data":null}`, `{"data":{}}`, `{"data":{"keys":null}}`} {
+		t.Run(body, func(t *testing.T) {
+			server, _ := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = io.WriteString(w, body)
+			})
+			_, err := newClient(t, server.URL).ListKeys(t.Context())
+			if err == nil || err.Error() != `listing of "" returned no data.keys` {
+				t.Fatalf("error = %v", err)
+			}
+		})
 	}
 }
 
@@ -239,7 +285,7 @@ func TestReadMetadata(t *testing.T) {
 		case "/v1/kv/homelab/metadata/app/empty":
 			_, _ = io.WriteString(w, `{"data":null}`)
 		default:
-			http.NotFound(w, r)
+			notFound(w, r)
 		}
 	})
 	client := newClient(t, server.URL)
@@ -331,7 +377,7 @@ func TestNetworkErrors(t *testing.T) {
 }
 
 func TestAddressWithAPathPrefix(t *testing.T) {
-	server, requests := serve(t, http.NotFound)
+	server, requests := serve(t, notFound)
 	if _, err := newClient(t, server.URL+"/bao/").ListKeys(t.Context()); err != nil {
 		t.Fatal(err)
 	}

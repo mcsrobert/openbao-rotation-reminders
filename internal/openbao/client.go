@@ -110,8 +110,11 @@ func (c *Client) ListKeys(ctx context.Context) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !found || response.Data == nil {
+		if !found {
 			continue
+		}
+		if response.Data == nil || response.Data.Keys == nil {
+			return nil, fmt.Errorf("listing of %q returned no data.keys", directory)
 		}
 		for _, entry := range response.Data.Keys {
 			if !validEntry(entry) {
@@ -145,7 +148,10 @@ func (c *Client) metadataURL(key string) *url.URL {
 }
 
 // do sends a request and decodes a JSON response into out. With allowNotFound,
-// a 404 response returns false instead of an error.
+// a 404 response with an empty errors array, which is how OpenBao reports a
+// missing key or an empty directory, returns false instead of an error. Any
+// other 404, such as a missing mount or a proxy route, is an error, so that it
+// cannot pass for an empty mount.
 func (c *Client) do(ctx context.Context, method string, target *url.URL, body, out any, allowNotFound bool) (bool, error) {
 	call := method + " " + target.EscapedPath()
 	var reader io.Reader
@@ -179,6 +185,9 @@ func (c *Client) do(ctx context.Context, method string, target *url.URL, body, o
 
 	// Response bodies are never included in errors, so they cannot reach logs.
 	if allowNotFound && response.StatusCode == http.StatusNotFound {
+		if !emptyNotFound(response.Body) {
+			return false, fmt.Errorf("HTTP 404 calling %s: no such route, check OPENBAO_ADDR and OPENBAO_MOUNT", call)
+		}
 		return false, nil
 	}
 	if response.StatusCode < 200 || response.StatusCode > 299 {
@@ -198,6 +207,19 @@ func (c *Client) do(ctx context.Context, method string, target *url.URL, body, o
 		return false, fmt.Errorf("request failed calling %s: response is not valid JSON", call)
 	}
 	return true, nil
+}
+
+// emptyNotFound reports whether body is a JSON object with an empty errors
+// array.
+func emptyNotFound(body io.Reader) bool {
+	var response struct {
+		Errors *[]string `json:"errors"`
+	}
+	content, err := io.ReadAll(io.LimitReader(body, maxResponseSize))
+	if err != nil || json.Unmarshal(content, &response) != nil {
+		return false
+	}
+	return response.Errors != nil && len(*response.Errors) == 0
 }
 
 // validEntry reports whether a listing entry is a single path segment, with a
