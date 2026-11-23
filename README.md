@@ -100,7 +100,7 @@ The job reads environment variables. Unset and empty variables are the same.
 | `OPENBAO_JWT_FILE` | `/var/run/secrets/openbao/token` | Service account token to log in with |
 | `OPENBAO_UI_URL` | | Opened when the notification is tapped |
 | `NTFY_URL` | `https://ntfy.sh` | ntfy server |
-| `NTFY_TOPIC` | required | Private topic: 1 to 64 letters, digits, `-` or `_`, as ntfy requires |
+| `NTFY_TOPIC` | required | Private topic: 1 to 64 letters, digits, `-` or `_`, and not a reserved ntfy name |
 | `DEFAULT_EXPIRES_WARN_BEFORE` | `14d` | Default lead time for `expires_at`, `0d` allowed |
 
 Anyone who knows the topic can read and publish to it, so treat it as a
