@@ -2,7 +2,6 @@
 set -euo pipefail
 
 image=openbao-rotation-reminders:smoke
-name=openbao-rotation-reminders-smoke
 
 docker build --build-arg VERSION=smoke --tag "${image}" .
 
@@ -17,19 +16,23 @@ if [[ "$(docker inspect --format '{{.Config.User}}' "${image}")" != 65532:65532 
 fi
 
 directory=$(mktemp -d)
+container=
 cleanup() {
-  docker rm --force "${name}" > /dev/null 2>&1 || true
+  if [[ -n "${container}" ]]; then
+    docker rm --force "${container}" > /dev/null 2>&1 || true
+  fi
   rm -rf "${directory}"
 }
 trap cleanup EXIT
 
-docker create --name "${name}" "${image}" > /dev/null
-docker cp "${name}:/etc/ssl/certs/ca-certificates.crt" "${directory}/ca-certificates.crt"
+container=$(docker create "${image}")
+docker cp "${container}:/etc/ssl/certs/ca-certificates.crt" "${directory}/ca-certificates.crt"
 if ! grep --quiet 'BEGIN CERTIFICATE' "${directory}/ca-certificates.crt"; then
   echo "the image has no CA certificates to verify ntfy" >&2
   exit 1
 fi
-docker rm "${name}" > /dev/null
+docker rm "${container}" > /dev/null
+container=
 
 hardened() {
   docker run --rm \
