@@ -82,6 +82,8 @@ func TestLoadErrors(t *testing.T) {
 		{"missing address", "OPENBAO_ADDR", "", "OPENBAO_ADDR: required"},
 		{"address scheme", "OPENBAO_ADDR", "ftp://openbao", "OPENBAO_ADDR: scheme must be http or https"},
 		{"address without host", "OPENBAO_ADDR", "https://", "OPENBAO_ADDR: host is required"},
+		{"address with only a port", "OPENBAO_ADDR", "https://:8200", "OPENBAO_ADDR: host is required"},
+		{"UI URL with only a port", "OPENBAO_UI_URL", "https://:8200/ui", "OPENBAO_UI_URL: host is required"},
 		{"address with credentials", "OPENBAO_ADDR", "https://user:pass@openbao", "OPENBAO_ADDR: must not contain credentials"},
 		{"address with query", "OPENBAO_ADDR", "https://openbao?x=1", "OPENBAO_ADDR: must not contain a query or a fragment"},
 		{"address not a URL", "OPENBAO_ADDR", "https://open bao:x", "OPENBAO_ADDR: not a valid URL"},
@@ -93,7 +95,7 @@ func TestLoadErrors(t *testing.T) {
 		{"ntfy URL", "NTFY_URL", "ntfy.sh", "NTFY_URL: scheme must be http or https"},
 		{"ntfy URL with credentials", "NTFY_URL", "https://user:" + topic + "@ntfy.sh", "NTFY_URL: must not contain credentials"},
 		{"ntfy URL with fragment", "NTFY_URL", "https://ntfy.sh/#x", "NTFY_URL: must not contain a query or a fragment"},
-		{"missing topic", "NTFY_TOPIC", "", "NTFY_TOPIC is empty or contains invalid characters"},
+		{"missing topic", "NTFY_TOPIC", "", "NTFY_TOPIC must be 1 to 64 letters, digits, hyphens or underscores"},
 		{"warning", "DEFAULT_EXPIRES_WARN_BEFORE", "2 weeks", `DEFAULT_EXPIRES_WARN_BEFORE: invalid duration "2 weeks" (use e.g. 80d, 12w, 24h)`},
 	}
 	for _, test := range tests {
@@ -108,20 +110,28 @@ func TestLoadErrors(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsTopicsThatChangeTheURL(t *testing.T) {
-	for _, value := range []string{"a/b", "a b", "a\tb", "a\rb", "a\nb", "a?b", "a&b", "a#b", ".", ".."} {
+func TestLoadRejectsTopicsNtfyDoesNotAccept(t *testing.T) {
+	for _, value := range []string{"a/b", "a b", "a\tb", "a\rb", "a\nb", "a?b", "a&b", "a#b", ".", "..", "a.b", "clé", strings.Repeat("a", 65)} {
 		values := minimal()
 		values["NTFY_TOPIC"] = value
 		_, err := Load(env(values))
-		if err == nil || err.Error() != "NTFY_TOPIC is empty or contains invalid characters" {
+		if err == nil || err.Error() != "NTFY_TOPIC must be 1 to 64 letters, digits, hyphens or underscores" {
 			t.Errorf("topic %q: error = %v", value, err)
 		}
 	}
 }
 
+func TestLoadAcceptsTheLongestTopic(t *testing.T) {
+	values := minimal()
+	values["NTFY_TOPIC"] = "A-z_0" + strings.Repeat("9", 59)
+	if _, err := Load(env(values)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLoadReportsEveryError(t *testing.T) {
 	_, err := Load(env(map[string]string{"NTFY_TOPIC": topic + "/x"}))
-	want := "OPENBAO_ADDR: required; OPENBAO_MOUNT: required; OPENBAO_K8S_ROLE: required; NTFY_TOPIC is empty or contains invalid characters"
+	want := "OPENBAO_ADDR: required; OPENBAO_MOUNT: required; OPENBAO_K8S_ROLE: required; NTFY_TOPIC must be 1 to 64 letters, digits, hyphens or underscores"
 	if err == nil || err.Error() != want {
 		t.Fatalf("error = %v, want %q", err, want)
 	}

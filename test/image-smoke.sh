@@ -53,7 +53,7 @@ expect_failure() {
 }
 
 expect_failure \
-  "configuration error: OPENBAO_ADDR: required; OPENBAO_MOUNT: required; OPENBAO_K8S_ROLE: required; NTFY_TOPIC is empty or contains invalid characters" \
+  "configuration error: OPENBAO_ADDR: required; OPENBAO_MOUNT: required; OPENBAO_K8S_ROLE: required; NTFY_TOPIC must be 1 to 64 letters, digits, hyphens or underscores" \
   "${image}"
 
 echo "smoke-test-jwt" > "${directory}/token"

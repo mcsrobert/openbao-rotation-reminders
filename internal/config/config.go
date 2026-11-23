@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,11 +15,10 @@ const (
 	defaultJWTFile           = "/var/run/secrets/openbao/token"
 	defaultNtfyURL           = "https://ntfy.sh"
 	defaultExpiresWarnBefore = "14d"
-
-	// invalidTopicCharacters would change the request URL if they were part
-	// of the topic.
-	invalidTopicCharacters = "/ \t\r\n?&#"
 )
+
+// topicPattern is the topic name ntfy accepts for publishing.
+var topicPattern = regexp.MustCompile(`^[-_A-Za-z0-9]{1,64}$`)
 
 // Config is the configuration of one run.
 type Config struct {
@@ -68,8 +68,10 @@ func Load(getenv func(string) string) (*Config, error) {
 		add("OPENBAO_UI_URL", validateURL(cfg.UIURL, false))
 	}
 	add("NTFY_URL", validateURL(cfg.NtfyURL, true))
-	if !validTopic(cfg.NtfyTopic) {
-		errs = append(errs, "NTFY_TOPIC is empty or contains invalid characters")
+	// The topic is never part of an error, because knowing it is enough to
+	// publish and read.
+	if !topicPattern.MatchString(cfg.NtfyTopic) {
+		errs = append(errs, "NTFY_TOPIC must be 1 to 64 letters, digits, hyphens or underscores")
 	}
 	warn, err := reminder.ParseDuration(get("DEFAULT_EXPIRES_WARN_BEFORE", defaultExpiresWarnBefore), true)
 	add("DEFAULT_EXPIRES_WARN_BEFORE", err)
@@ -95,7 +97,7 @@ func validateURL(value string, base bool) error {
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return errors.New("scheme must be http or https")
 	}
-	if parsed.Host == "" {
+	if parsed.Hostname() == "" {
 		return errors.New("host is required")
 	}
 	if parsed.User != nil {
@@ -120,10 +122,4 @@ func validateMount(mount string) error {
 		}
 	}
 	return nil
-}
-
-// validTopic reports whether topic is a single path segment. The topic is
-// never part of an error, because knowing it is enough to publish and read.
-func validTopic(topic string) bool {
-	return topic != "" && topic != "." && topic != ".." && !strings.ContainsAny(topic, invalidTopicCharacters)
 }
