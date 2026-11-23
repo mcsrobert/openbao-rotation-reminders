@@ -64,3 +64,9 @@ mise run test:e2e      # needs Docker
   the image digest in the chart. Do not create tags or releases by hand.
 - Do not edit `CHANGELOG.md`, `.release-please-manifest.json` or the versions
   in `Chart.yaml`. Release-please maintains them.
+- If the release workflow fails after publishing part of a release, re-run
+  the failed jobs. It reuses an image or chart that the same commit already
+  published and refuses any other existing version.
+- GHCR creates new packages as private, so the first release's anonymous
+  verification fails. Make the image and chart packages public, then re-run
+  the failed jobs.
