@@ -155,19 +155,65 @@ names() {
     | yq --no-doc '[.metadata.name, .spec.jobTemplate.spec.template.spec.serviceAccountName // "", (.spec.jobTemplate.spec.template.spec.containers[0].env[] | select(.name == "OPENBAO_K8S_ROLE") | .value) // ""] | map(select(. != "")) | join(",")' \
     | paste -sd, -
 }
-long_name=production-rotation-reminder-openbao-rotation-remind
+short_name() {
+  local full="$1"
+  local hash prefix
+  hash=$(printf '%s' "${full}" | sha256sum | cut -c1-8)
+  prefix=$(printf '%s' "${full:0:43}" | sed 's/[-.]*$//')
+  printf '%s-%s' "${prefix}" "${hash}"
+}
+assert_valid_cronjob_name() {
+  local label="$1" rendered="$2"
+  local name="${rendered%%,*}"
+  if [[ ${#name} -gt 52 ]]; then
+    fail "${label}: ${name} is ${#name} characters"
+  fi
+  if [[ ! "${name}" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$ ]]; then
+    fail "${label}: ${name} is not a valid DNS subdomain"
+  fi
+  expect_equal "${label} consistency" "${rendered}" "${name},${name},${name},${name}"
+}
+
+long_name=$(short_name production-rotation-reminder-openbao-rotation-reminders)
 expect_equal "names of a long release" "$(names production-rotation-reminder)" \
   "${long_name},${long_name},${long_name},${long_name}"
+long_override=$(printf 'a%.0s' {1..60})
+long_override_name=$(short_name "${long_override}")
 expect_equal "names with a long override" \
-  "$(names "${release}" --set fullnameOverride="$(printf 'a%.0s' {1..60})")" \
-  "$(printf 'a%.0s' {1..52} | sed 's/.*/&,&,&,&/')"
+  "$(names "${release}" --set "fullnameOverride=${long_override}")" \
+  "${long_override_name},${long_override_name},${long_override_name},${long_override_name}"
+
+dot_cutoff_release="$(printf 'a%.0s' {1..42}).$(printf 'b%.0s' {1..10})"
+assert_valid_cronjob_name "release with dot at cutoff" "$(names "${dot_cutoff_release}")"
+dot_end_release="openbao-rotation-reminders-$(printf 'a%.0s' {1..24}).x"
+assert_valid_cronjob_name "53-char release ending in .x" "$(names "${dot_end_release}")"
+double_hyphen_override="$(printf 'a%.0s' {1..41})--$(printf 'b%.0s' {1..17})"
+assert_valid_cronjob_name "override with double hyphen at cutoff" \
+  "$(names "${release}" --set "fullnameOverride=${double_hyphen_override}")"
+
+rel53_a="$(printf 'a%.0s' {1..52})a"
+rel53_b="$(printf 'a%.0s' {1..52})b"
+names_a=$(names "${rel53_a}")
+names_b=$(names "${rel53_b}")
+assert_valid_cronjob_name "53-char release a" "${names_a}"
+assert_valid_cronjob_name "53-char release b" "${names_b}"
+if [[ "${names_a}" == "${names_b}" ]]; then
+  fail "distinct 53-char releases collided: ${names_a}"
+fi
 
 pod_labels() {
   cronjob "${pod%.spec}.metadata.labels | to_entries | map(.key + \"=\" + .value) | join(\",\")" "$@"
 }
+chart_version=$(yq '.version' "${chart}/Chart.yaml")
 expect_equal "pod labels" \
   "$(pod_labels --set podLabels.team=platform --set-string podLabels.app\\.kubernetes\\.io/version=custom)" \
-  "app.kubernetes.io/instance=${release},app.kubernetes.io/managed-by=Helm,app.kubernetes.io/name=openbao-rotation-reminders,app.kubernetes.io/version=custom,helm.sh/chart=openbao-rotation-reminders-$(yq '.version' "${chart}/Chart.yaml"),team=platform"
+  "app.kubernetes.io/instance=${release},app.kubernetes.io/managed-by=Helm,app.kubernetes.io/name=openbao-rotation-reminders,app.kubernetes.io/version=custom,helm.sh/chart=openbao-rotation-reminders-${chart_version},team=platform"
+expect_equal "empty pod label override" \
+  "$(pod_labels --set-string podLabels.app\\.kubernetes\\.io/version=)" \
+  "app.kubernetes.io/instance=${release},app.kubernetes.io/managed-by=Helm,app.kubernetes.io/name=openbao-rotation-reminders,app.kubernetes.io/version=,helm.sh/chart=openbao-rotation-reminders-${chart_version}"
+expect_equal "selector labels stay protected" \
+  "$(pod_labels --skip-schema-validation --set podLabels.app\\.kubernetes\\.io/name=other --set podLabels.app\\.kubernetes\\.io/instance=other)" \
+  "app.kubernetes.io/instance=${release},app.kubernetes.io/managed-by=Helm,app.kubernetes.io/name=openbao-rotation-reminders,app.kubernetes.io/version=$(yq '.appVersion' "${chart}/Chart.yaml"),helm.sh/chart=openbao-rotation-reminders-${chart_version}"
 
 numeric=(
   --set-string ntfy.existingSecret=1234
