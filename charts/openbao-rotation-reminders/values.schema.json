@@ -39,7 +39,7 @@
       "required": ["address", "mount"],
       "properties": {
         "address": { "$ref": "#/definitions/url" },
-        "mount": { "type": "string", "pattern": "^/*[^/\\s]+(/[^/\\s]+)*/*$" },
+        "mount": { "type": "string", "pattern": "^/*([^/\\s.][^/\\s]*|\\.[^/\\s.][^/\\s]*|\\.\\.[^/\\s]+)(/([^/\\s.][^/\\s]*|\\.[^/\\s.][^/\\s]*|\\.\\.[^/\\s]+))*/*$" },
         "uiUrl": { "anyOf": [{ "const": "" }, { "type": "string", "pattern": "^https?://[^/?#@\\s]+([/?#]\\S*)?$" }] },
         "auth": {
           "type": "object",
@@ -107,7 +107,10 @@
     "podSecurityContext": { "type": "object" },
     "securityContext": { "type": "object" },
     "podAnnotations": { "type": "object" },
-    "podLabels": { "type": "object" },
+    "podLabels": {
+      "type": "object",
+      "propertyNames": { "not": { "enum": ["app.kubernetes.io/name", "app.kubernetes.io/instance"] } }
+    },
     "priorityClassName": { "type": "string" },
     "nodeSelector": { "type": "object" },
     "tolerations": { "type": "array" },

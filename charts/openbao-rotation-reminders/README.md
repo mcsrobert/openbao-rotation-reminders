@@ -38,7 +38,10 @@ The job logs in with a projected service account token for the audience in
 mounted. The OpenBao Kubernetes auth role must use the same audience and bind
 the release's service account and namespace. By default, the role and the
 service account are both named after the release: `openbao-rotation-reminders`
-for that release name, or `<release>-openbao-rotation-reminders` otherwise.
+for that release name, or `<release>-openbao-rotation-reminders` otherwise, cut
+to 52 characters, the limit for a `CronJob` name. With
+`serviceAccount.create=false`, set `serviceAccount.name` to the account the
+role binds, because the job otherwise runs as `default`.
 
 To run a check now:
 
@@ -79,7 +82,7 @@ kubectl --namespace security logs --follow job/manual-check
 | `image.pullPolicy` | `IfNotPresent` | Pull policy |
 | `imagePullSecrets` | `[]` | Pull secrets |
 | `serviceAccount.create` | `true` | Create a service account |
-| `serviceAccount.name` | Full name of the release | Service account name |
+| `serviceAccount.name` | Full name of the release, or `default` without `serviceAccount.create` | Service account name |
 | `serviceAccount.annotations` | `{}` | Service account annotations |
 | `networkPolicy.enabled` | `false` | Create a `NetworkPolicy` |
 | `networkPolicy.openbao.podSelector` | OpenBao chart's server pods | OpenBao pods the job may reach |
@@ -89,7 +92,7 @@ kubectl --namespace security logs --follow job/manual-check
 | `resources` | 10m CPU, 32Mi request, 64Mi limit | Container resources |
 | `podSecurityContext` | Non-root, `RuntimeDefault` seccomp | Pod security context |
 | `securityContext` | Read-only root, no capabilities | Container security context |
-| `podAnnotations`, `podLabels` | `{}` | Extra pod metadata |
+| `podAnnotations`, `podLabels` | `{}` | Extra pod metadata. `podLabels` may override the chart's labels except `app.kubernetes.io/name` and `app.kubernetes.io/instance`, which select the pods |
 | `priorityClassName` | `""` | Priority class |
 | `nodeSelector`, `tolerations`, `affinity` | Empty | Scheduling |
 | `nameOverride`, `fullnameOverride` | `""` | Resource names |
