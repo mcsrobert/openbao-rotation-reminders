@@ -13,8 +13,6 @@
   ],
   timezone: 'Europe/Amsterdam',
   dependencyDashboardTitle: 'Renovate Dashboard 🤖',
-  minimumReleaseAge: '6 days',
-  internalChecksFilter: 'strict',
   postUpdateOptions: ['gomodTidy'],
   customManagers: [
     {
