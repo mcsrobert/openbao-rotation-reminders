@@ -16,6 +16,8 @@ const (
 	MaxBodyBytes       = 4096
 	truncatedBodyBytes = 3900
 	truncationMarker   = "\n... (truncated; check pod logs for full list)"
+	// maxTitleBytes is the longest title ntfy accepts.
+	maxTitleBytes = 1024
 )
 
 type style struct {
@@ -77,8 +79,10 @@ func Build(findings []reminder.Finding) Digest {
 
 	var title string
 	switch {
-	case len(ordered) == 1:
+	case len(ordered) == 1 && len(ordered[0].Key) <= maxTitleBytes-len("OpenBao:  ")-len(top.singular):
 		title = fmt.Sprintf("OpenBao: %s %s", ordered[0].Key, top.singular)
+	case len(ordered) == 1:
+		title = "OpenBao: 1 secret " + top.singular
 	case len(sections) == 1:
 		title = fmt.Sprintf("OpenBao: %d secrets %s", len(ordered), top.plural)
 	default:
