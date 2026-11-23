@@ -121,6 +121,28 @@ func TestLoadRejectsTopicsNtfyDoesNotAccept(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsReservedNtfyTopics(t *testing.T) {
+	reserved := []string{"docs", "static", "file", "app", "metrics", "account", "settings", "signup", "login", "v1"}
+	for _, value := range reserved {
+		values := minimal()
+		values["NTFY_TOPIC"] = value
+		_, err := Load(env(values))
+		if err == nil || err.Error() != "NTFY_TOPIC must not be a reserved ntfy topic name" {
+			t.Errorf("topic %q: error = %v", value, err)
+		}
+		if err != nil && strings.Contains(err.Error(), value) {
+			t.Errorf("topic %q: error reveals the topic: %q", value, err.Error())
+		}
+	}
+	for _, allowed := range []string{"Metrics", "metrics-1", "v1-alerts"} {
+		values := minimal()
+		values["NTFY_TOPIC"] = allowed
+		if _, err := Load(env(values)); err != nil {
+			t.Errorf("topic %q: unexpected error = %v", allowed, err)
+		}
+	}
+}
+
 func TestLoadAcceptsTheLongestTopic(t *testing.T) {
 	values := minimal()
 	values["NTFY_TOPIC"] = "A-z_0" + strings.Repeat("9", 59)

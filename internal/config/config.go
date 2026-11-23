@@ -72,6 +72,8 @@ func Load(getenv func(string) string) (*Config, error) {
 	// publish and read.
 	if !topicPattern.MatchString(cfg.NtfyTopic) {
 		errs = append(errs, "NTFY_TOPIC must be 1 to 64 letters, digits, hyphens or underscores")
+	} else if isReservedTopic(cfg.NtfyTopic) {
+		errs = append(errs, "NTFY_TOPIC must not be a reserved ntfy topic name")
 	}
 	warn, err := reminder.ParseDuration(get("DEFAULT_EXPIRES_WARN_BEFORE", defaultExpiresWarnBefore), true)
 	add("DEFAULT_EXPIRES_WARN_BEFORE", err)
@@ -122,4 +124,15 @@ func validateMount(mount string) error {
 		}
 	}
 	return nil
+}
+
+// isReservedTopic reports whether topic is one of ntfy's built-in disallowed
+// topic names.
+func isReservedTopic(topic string) bool {
+	switch topic {
+	case "docs", "static", "file", "app", "metrics", "account", "settings", "signup", "login", "v1":
+		return true
+	default:
+		return false
+	}
 }
