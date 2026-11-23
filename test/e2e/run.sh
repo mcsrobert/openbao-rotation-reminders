@@ -5,6 +5,7 @@ cluster=openbao-rotation-reminders-e2e
 image=openbao-rotation-reminders:e2e
 topic="e2e-$(openssl rand -hex 8)"
 work=$(mktemp -d)
+export KUBECONFIG="${work}/kubeconfig"
 
 cleanup() {
   status=$?
