@@ -2,6 +2,7 @@ package ntfy
 
 import (
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -50,7 +51,7 @@ func TestPublish(t *testing.T) {
 		t.Errorf("request = %s %s", request.Method, request.URL.Path)
 	}
 	for header, want := range map[string]string{
-		"Title":        "OpenBao: cl? expired?",
+		"Title":        "=?utf-8?b?T3BlbkJhbzogY2zDqSBleHBpcmVkPw==?=",
 		"Priority":     "urgent",
 		"Tags":         "rotating_light,key",
 		"Click":        "https://bao.example.com",
@@ -62,6 +63,23 @@ func TestPublish(t *testing.T) {
 	}
 	if body != "EXPIRED:\n- clé: expired" {
 		t.Errorf("body = %q", body)
+	}
+	if title, err := new(mime.WordDecoder).DecodeHeader(request.Header.Get("Title")); err != nil || title != "OpenBao: clé expired?" {
+		t.Errorf("decoded title = %q, %v", title, err)
+	}
+}
+
+func TestPublishLeavesASCIITitlesAlone(t *testing.T) {
+	var title string
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		title = r.Header.Get("Title")
+	}))
+	defer server.Close()
+	if err := newClient(t, server.URL).Publish(t.Context(), Message{Title: "OpenBao: app/key\texpired"}); err != nil {
+		t.Fatal(err)
+	}
+	if title != "OpenBao: app/key?expired" {
+		t.Errorf("title = %q", title)
 	}
 }
 
@@ -132,6 +150,12 @@ func TestPublishErrorsDoNotRevealTheTopic(t *testing.T) {
 	closed := "http://" + listener.Addr().String()
 	_ = listener.Close()
 
+	malformedRedirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "http://[::1"+r.URL.Path)
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer malformedRedirect.Close()
+
 	hanging := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hijacker, _ := w.(http.Hijacker)
 		conn, _, _ := hijacker.Hijack()
@@ -146,7 +170,8 @@ func TestPublishErrorsDoNotRevealTheTopic(t *testing.T) {
 	}{
 		{"HTTP error", failing.URL, "ntfy publish failed with HTTP 403"},
 		{"connection refused", closed, "ntfy publish failed: dial tcp"},
-		{"connection closed", hanging.URL, "ntfy publish failed: "},
+		{"connection closed", hanging.URL, "ntfy publish failed: EOF"},
+		{"malformed redirect", malformedRedirect.URL, "ntfy publish failed: the request could not be completed"},
 		{"TLS error", strings.Replace(failing.URL, "http://", "https://", 1), "ntfy publish failed: "},
 	}
 	for _, test := range tests {

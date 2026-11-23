@@ -3,9 +3,13 @@ package ntfy
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -45,7 +49,7 @@ func (c *Client) Publish(ctx context.Context, message Message) error {
 	if err != nil {
 		return errors.New("ntfy publish failed: could not build the request")
 	}
-	request.Header.Set("Title", asciiHeader(message.Title))
+	request.Header.Set("Title", encodeHeader(message.Title))
 	request.Header.Set("Priority", message.Priority)
 	request.Header.Set("Tags", message.Tags)
 	request.Header.Set("Content-Type", "text/plain; charset=utf-8")
@@ -55,12 +59,7 @@ func (c *Client) Publish(ctx context.Context, message Message) error {
 
 	response, err := c.http.Do(request)
 	if err != nil {
-		// A url.Error names the request URL, which contains the topic.
-		var urlErr *url.Error
-		if errors.As(err, &urlErr) {
-			err = urlErr.Err
-		}
-		return fmt.Errorf("ntfy publish failed: %w", err)
+		return transportError(err)
 	}
 	defer func() { _ = response.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maxResponseSize))
@@ -70,13 +69,38 @@ func (c *Client) Publish(ctx context.Context, message Message) error {
 	return nil
 }
 
-// asciiHeader replaces everything but printable ASCII with a question mark,
-// because header values are not reliably decoded as UTF-8.
-func asciiHeader(value string) string {
-	return strings.Map(func(r rune) rune {
-		if r < 0x20 || r > 0x7e {
+// transportError describes a failed request without the topic. A url.Error
+// names the request URL, and other errors can quote what the server sent, such
+// as a malformed redirect location, so only errors of known kinds keep their
+// text.
+func transportError(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		err = urlErr.Err
+	}
+	var netErr net.Error
+	var certErr *tls.CertificateVerificationError
+	var authorityErr x509.UnknownAuthorityError
+	var hostnameErr x509.HostnameError
+	var recordErr tls.RecordHeaderError
+	switch {
+	case errors.As(err, &netErr), errors.As(err, &certErr), errors.As(err, &authorityErr),
+		errors.As(err, &hostnameErr), errors.As(err, &recordErr),
+		errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF),
+		errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return fmt.Errorf("ntfy publish failed: %w", err)
+	}
+	return errors.New("ntfy publish failed: the request could not be completed")
+}
+
+// encodeHeader replaces control characters with a question mark and encodes
+// anything else outside printable ASCII as an RFC 2047 encoded word, which
+// ntfy decodes, because header values are not reliably decoded as UTF-8.
+func encodeHeader(value string) string {
+	return mime.BEncoding.Encode("utf-8", strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
 			return '?'
 		}
 		return r
-	}, value)
+	}, value))
 }
