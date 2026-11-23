@@ -92,7 +92,7 @@ func (b *fakeBao) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		metadata, ok := b.secrets[key]
 		if !ok {
-			http.NotFound(w, r)
+			notFound(w)
 			return
 		}
 		_, _ = fmt.Fprintf(w, `{"data":%s}`, metadata)
@@ -121,10 +121,17 @@ func (b *fakeBao) list(w http.ResponseWriter, directory string) {
 		}
 	}
 	if len(entries) == 0 {
-		w.WriteHeader(http.StatusNotFound)
+		notFound(w)
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"keys": entries}})
+}
+
+// notFound responds like OpenBao does for a missing key or an empty
+// directory.
+func notFound(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = io.WriteString(w, `{"errors":[]}`)
 }
 
 func (b *fakeBao) count(request string) int {
@@ -380,6 +387,12 @@ func TestRunOpenBaoErrors(t *testing.T) {
 			name:    "listing fails",
 			setup:   func(b *fakeBao, _ map[string]string) { b.listStatus = http.StatusInternalServerError },
 			want:    "openbao error: HTTP 500 calling GET /v1/secret/metadata/\n",
+			revoked: 1,
+		},
+		{
+			name:    "missing mount",
+			setup:   func(b *fakeBao, _ map[string]string) { b.listStatus = http.StatusNotFound },
+			want:    "openbao error: HTTP 404 calling GET /v1/secret/metadata/: no such route, check OPENBAO_ADDR and OPENBAO_MOUNT\n",
 			revoked: 1,
 		},
 		{

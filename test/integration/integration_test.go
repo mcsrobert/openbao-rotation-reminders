@@ -463,6 +463,40 @@ func TestAgainstRealOpenBao(t *testing.T) {
 		}
 	})
 
+	t.Run("missing and empty mounts the policy covers", func(t *testing.T) {
+		server.mustRoot(http.MethodPost, "sys/policies/acl/other-mounts", map[string]string{"policy": `
+path "empty/metadata/*" {
+  capabilities = ["list", "read"]
+}
+
+path "missing/metadata/*" {
+  capabilities = ["list", "read"]
+}
+
+path "auth/token/revoke-self" {
+  capabilities = ["update"]
+}
+`})
+		server.mustRoot(http.MethodPost, "auth/kubernetes/role/other-mounts", map[string]any{
+			"bound_service_account_names":      []string{serviceAccountName},
+			"bound_service_account_namespaces": []string{serviceAccountNamespace},
+			"audience":                         audience,
+			"token_policies":                   []string{"other-mounts"},
+			"token_no_default_policy":          true,
+			"token_ttl":                        "5m",
+		})
+		server.mustRoot(http.MethodPost, "sys/mounts/empty", map[string]any{"type": "kv", "options": map[string]string{"version": "2"}})
+
+		status, stdout, stderr := run(t, map[string]string{"OPENBAO_K8S_ROLE": "other-mounts", "OPENBAO_MOUNT": "empty"})
+		if status != 0 || stdout != "scanned=0 tracked=0 findings=0\n" || stderr != "" {
+			t.Fatalf("empty mount: status %d\nstdout:\n%s\nstderr:\n%s", status, stdout, stderr)
+		}
+		status, stdout, stderr = run(t, map[string]string{"OPENBAO_K8S_ROLE": "other-mounts", "OPENBAO_MOUNT": "missing"})
+		if status != 1 || stdout != "" || stderr != "openbao error: HTTP 404 calling GET /v1/missing/metadata/: no such route, check OPENBAO_ADDR and OPENBAO_MOUNT\n" {
+			t.Fatalf("missing mount: status %d\nstdout:\n%s\nstderr:\n%s", status, stdout, stderr)
+		}
+	})
+
 	t.Run("mount the policy does not cover", func(t *testing.T) {
 		server.mustRoot(http.MethodPost, "sys/mounts/other", map[string]any{"type": "kv", "options": map[string]string{"version": "2"}})
 		before := server.tokenCount()
