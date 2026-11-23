@@ -82,7 +82,8 @@ INVALID METADATA:
 - app/database: metadata error: unknown metadata key "rotation_intervall"
 ```
 
-The title names the secret when there is one finding, and counts per severity
+The title names the secret when there is one finding, unless its name would
+make the title longer than ntfy's 1024-byte limit, and counts per severity
 otherwise. A body over 4096 bytes, ntfy's message limit, is cut to whole lines
 and points to the job's log, which always has the full list.
 

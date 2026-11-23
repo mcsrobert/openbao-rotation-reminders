@@ -66,6 +66,21 @@ func TestBuildTitles(t *testing.T) {
 	}
 }
 
+func TestBuildTitlesFitNtfysLimit(t *testing.T) {
+	fits := strings.Repeat("a", 1024-len("OpenBao:  has invalid rotation metadata"))
+	if got := Build([]reminder.Finding{finding(reminder.SeverityInvalid, fits, 0, "reason")}).Title; got != "OpenBao: "+fits+" has invalid rotation metadata" || len(got) != 1024 {
+		t.Errorf("title = %q", got)
+	}
+	long := fits + "a"
+	got := Build([]reminder.Finding{finding(reminder.SeverityInvalid, long, 0, "reason")})
+	if got.Title != "OpenBao: 1 secret has invalid rotation metadata" {
+		t.Errorf("title = %q", got.Title)
+	}
+	if !strings.Contains(got.Body, "- "+long+": reason") {
+		t.Errorf("body does not name the secret:\n%s", got.Body)
+	}
+}
+
 func TestBuildPriorityFollowsTheMostUrgentFinding(t *testing.T) {
 	got := Build([]reminder.Finding{
 		finding(reminder.SeverityInvalid, "a", 0, "reason"),
