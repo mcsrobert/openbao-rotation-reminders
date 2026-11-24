@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -470,6 +473,8 @@ func TestRunNotificationErrors(t *testing.T) {
 		t.Errorf("stdout:\n%s", got.stdout)
 	}
 
+	retryFor = 0
+	t.Cleanup(func() { retryFor = 30 * time.Second })
 	unreachable := newFakeNtfy(t)
 	unreachable.server.Close()
 	env := environment(t, bao, unreachable)
@@ -480,5 +485,36 @@ func TestRunNotificationErrors(t *testing.T) {
 	}
 	if strings.Contains(got.stderr, (&url.URL{Scheme: "http", Host: host, Path: "/" + topic}).String()) {
 		t.Error("the error contains the request URL")
+	}
+}
+
+func TestRetryConnect(t *testing.T) {
+	retryDelay = time.Millisecond
+	t.Cleanup(func() { retryDelay = time.Second })
+	refused := fmt.Errorf("request failed: %w", &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED})
+	reset := fmt.Errorf("request failed: %w", &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET})
+
+	calls := 0
+	err := retryConnect(t.Context(), func() error {
+		if calls++; calls < 3 {
+			return refused
+		}
+		return nil
+	})
+	if err != nil || calls != 3 {
+		t.Errorf("refused twice: err = %v after %d calls", err, calls)
+	}
+
+	calls = 0
+	err = retryConnect(t.Context(), func() error { calls++; return reset })
+	if !errors.Is(err, reset) || calls != 1 {
+		t.Errorf("a request that reached the server: err = %v after %d calls", err, calls)
+	}
+
+	retryFor = 50 * time.Millisecond
+	t.Cleanup(func() { retryFor = 30 * time.Second })
+	err = retryConnect(t.Context(), func() error { return refused })
+	if !errors.Is(err, refused) {
+		t.Errorf("always refused: err = %v", err)
 	}
 }

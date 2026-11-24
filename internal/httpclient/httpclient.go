@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -26,6 +27,7 @@ func New(roots *x509.CertPool) (*http.Client, error) {
 	}
 	transport = transport.Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	transport.DialContext = (&net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}).DialContext
 	return &http.Client{
 		Transport: transport,
 		Timeout:   requestTimeout,
