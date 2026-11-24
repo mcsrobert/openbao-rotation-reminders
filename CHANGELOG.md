@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.1](https://github.com/mcsrobert/openbao-rotation-reminders/compare/v1.0.0...v1.0.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **app:** retry the OpenBao login and ntfy publish on failed connections ([6af0988](https://github.com/mcsrobert/openbao-rotation-reminders/commit/6af0988c5ef82abca87131ca3b10b8e2ac7161f2))
+* **container:** update gcr.io/distroless/static-debian13 ( 25ac8f0 ➔ 8ce6dd8 ) ([#8](https://github.com/mcsrobert/openbao-rotation-reminders/issues/8)) ([4036fd7](https://github.com/mcsrobert/openbao-rotation-reminders/commit/4036fd7d61ffa6e587361baaf31636d52a027696))
+* **container:** update go ( 1.27.3 ➔ 1.27.4 ) ([e8ce43e](https://github.com/mcsrobert/openbao-rotation-reminders/commit/e8ce43ea5417af195156482f00cb47118d76ddf8))
+
 ## 1.0.0 (2026-11-23)
 
 
