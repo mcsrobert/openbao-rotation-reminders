@@ -8,7 +8,7 @@ COPY cmd ./cmd
 COPY internal ./internal
 RUN CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o /out/openbao-rotation-reminders ./cmd/openbao-rotation-reminders
 
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:8ce6dd87e9823c5b48dcfb2c8604714ccb351ce59607327bcc4957448da279b5
 LABEL org.opencontainers.image.source="https://github.com/mcsrobert/openbao-rotation-reminders"
 LABEL org.opencontainers.image.description="Daily ntfy digest of OpenBao KV v2 secrets due for rotation"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
