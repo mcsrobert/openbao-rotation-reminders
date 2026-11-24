@@ -5,8 +5,10 @@ package app
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -17,6 +19,11 @@ import (
 	"github.com/mcsrobert/openbao-rotation-reminders/internal/ntfy"
 	"github.com/mcsrobert/openbao-rotation-reminders/internal/openbao"
 	"github.com/mcsrobert/openbao-rotation-reminders/internal/reminder"
+)
+
+var (
+	retryFor   = 30 * time.Second
+	retryDelay = time.Second
 )
 
 // Run checks every secret at now, with the configuration from getenv, and
@@ -41,12 +48,14 @@ func Run(ctx context.Context, getenv func(string) string, stdout, stderr io.Writ
 
 	notification := digest.Build(result.findings)
 	_, _ = fmt.Fprintf(stdout, "--- %s (priority=%s) ---\n%s\n", notification.Title, notification.Priority, notification.Body)
-	err = publisher.Publish(ctx, ntfy.Message{
-		Title:    notification.Title,
-		Priority: notification.Priority,
-		Tags:     notification.Tags,
-		Click:    cfg.UIURL,
-		Body:     digest.Truncate(notification.Body),
+	err = retryConnect(ctx, func() error {
+		return publisher.Publish(ctx, ntfy.Message{
+			Title:    notification.Title,
+			Priority: notification.Priority,
+			Tags:     notification.Tags,
+			Click:    cfg.UIURL,
+			Body:     digest.Truncate(notification.Body),
+		})
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "notification error: %v\n", err)
@@ -99,7 +108,7 @@ func scan(ctx context.Context, cfg *config.Config, bao *openbao.Client, now time
 	if err != nil {
 		return result{}, err
 	}
-	if err := bao.Login(ctx, cfg.Role, jwt); err != nil {
+	if err := retryConnect(ctx, func() error { return bao.Login(ctx, cfg.Role, jwt) }); err != nil {
 		return result{}, err
 	}
 	defer func() {
@@ -131,6 +140,22 @@ func scan(ctx context.Context, cfg *config.Config, bao *openbao.Client, now time
 		}
 	}
 	return r, nil
+}
+
+func retryConnect(ctx context.Context, send func() error) error {
+	deadline := time.Now().Add(retryFor)
+	for {
+		err := send()
+		var opErr *net.OpError
+		if err == nil || !errors.As(err, &opErr) || opErr.Op != "dial" || time.Now().Add(retryDelay).After(deadline) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(retryDelay):
+		}
+	}
 }
 
 func readJWT(path string) (string, error) {
