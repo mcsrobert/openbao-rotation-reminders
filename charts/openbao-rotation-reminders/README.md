@@ -68,7 +68,7 @@ kubectl --namespace security logs --follow job/manual-check
 | `ntfy.url` | `https://ntfy.sh` | ntfy server |
 | `ntfy.existingSecret` | required | Secret with the topic |
 | `ntfy.existingSecretKey` | `NTFY_TOPIC` | Key of the topic in that Secret |
-| `reminders.defaultExpiresWarnBefore` | `14d` | Default lead time for `expires_at` |
+| `reminders.defaultWarnBefore` | `7d` | Default lead time before a deadline |
 | `schedule` | `0 9 * * *` | Cron schedule |
 | `timeZone` | Controller's time zone | Time zone of the schedule, such as `Europe/Amsterdam` |
 | `concurrencyPolicy` | `Forbid` | What to do when a run is still active |

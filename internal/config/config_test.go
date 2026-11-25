@@ -28,13 +28,13 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := &Config{
-		OpenBaoAddress:           "https://openbao.security.svc.cluster.local:8200",
-		OpenBaoMount:             "homelab",
-		Role:                     "openbao-rotation-reminders",
-		JWTFile:                  "/var/run/secrets/openbao/token",
-		NtfyURL:                  "https://ntfy.sh",
-		NtfyTopic:                topic,
-		DefaultExpiresWarnBefore: 14 * 24 * time.Hour,
+		OpenBaoAddress:    "https://openbao.security.svc.cluster.local:8200",
+		OpenBaoMount:      "homelab",
+		Role:              "openbao-rotation-reminders",
+		JWTFile:           "/var/run/secrets/openbao/token",
+		NtfyURL:           "https://ntfy.sh",
+		NtfyTopic:         topic,
+		DefaultWarnBefore: 7 * 24 * time.Hour,
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("config = %+v, want %+v", cfg, want)
@@ -43,15 +43,15 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadEverything(t *testing.T) {
 	values := map[string]string{
-		"OPENBAO_ADDR":                " http://127.0.0.1:8200/ ",
-		"OPENBAO_MOUNT":               "/kv/homelab/",
-		"OPENBAO_K8S_ROLE":            "role",
-		"OPENBAO_CA_FILE":             "/etc/openbao/ca.crt",
-		"OPENBAO_JWT_FILE":            "/token",
-		"OPENBAO_UI_URL":              "https://bao.example.com/ui/vault/secrets?x=1#kv",
-		"NTFY_URL":                    "http://ntfy.example.com/base",
-		"NTFY_TOPIC":                  " " + topic + "\n",
-		"DEFAULT_EXPIRES_WARN_BEFORE": "0d",
+		"OPENBAO_ADDR":        " http://127.0.0.1:8200/ ",
+		"OPENBAO_MOUNT":       "/kv/homelab/",
+		"OPENBAO_K8S_ROLE":    "role",
+		"OPENBAO_CA_FILE":     "/etc/openbao/ca.crt",
+		"OPENBAO_JWT_FILE":    "/token",
+		"OPENBAO_UI_URL":      "https://bao.example.com/ui/vault/secrets?x=1#kv",
+		"NTFY_URL":            "http://ntfy.example.com/base",
+		"NTFY_TOPIC":          " " + topic + "\n",
+		"DEFAULT_WARN_BEFORE": "0d",
 	}
 	cfg, err := Load(env(values))
 	if err != nil {
@@ -96,7 +96,7 @@ func TestLoadErrors(t *testing.T) {
 		{"ntfy URL with credentials", "NTFY_URL", "https://user:" + topic + "@ntfy.sh", "NTFY_URL: must not contain credentials"},
 		{"ntfy URL with fragment", "NTFY_URL", "https://ntfy.sh/#x", "NTFY_URL: must not contain a query or a fragment"},
 		{"missing topic", "NTFY_TOPIC", "", "NTFY_TOPIC must be 1 to 64 letters, digits, hyphens or underscores"},
-		{"warning", "DEFAULT_EXPIRES_WARN_BEFORE", "2 weeks", `DEFAULT_EXPIRES_WARN_BEFORE: invalid duration "2 weeks" (use e.g. 80d, 12w, 24h)`},
+		{"warning", "DEFAULT_WARN_BEFORE", "2 weeks", `DEFAULT_WARN_BEFORE: invalid duration "2 weeks" (use e.g. 80d, 12w, 24h)`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

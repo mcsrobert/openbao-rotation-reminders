@@ -86,7 +86,7 @@ expect_equal "role of another release" \
 expect_equal "JWT file" "$(env OPENBAO_JWT_FILE)" "/var/run/secrets/openbao/token"
 expect_equal "ntfy URL" "$(env NTFY_URL)" "https://ntfy.sh"
 expect_equal "ntfy topic" "$(env NTFY_TOPIC)" "openbao-rotation-reminders-ntfy/NTFY_TOPIC"
-expect_equal "default warning" "$(env DEFAULT_EXPIRES_WARN_BEFORE)" "14d"
+expect_equal "default warning" "$(env DEFAULT_WARN_BEFORE)" "7d"
 expect_equal "no CA file" "$(env OPENBAO_CA_FILE)" ""
 expect_equal "no UI URL" "$(env OPENBAO_UI_URL)" ""
 expect_equal "UI URL" "$(env OPENBAO_UI_URL --set openbao.uiUrl=https://bao.example.com)" "https://bao.example.com"
@@ -245,7 +245,7 @@ expect_rejected "a pod label that selects the release" --values "${values}" --se
 expect_rejected "a missing ntfy secret" --values "${values}" --set ntfy.existingSecret=
 expect_rejected "an ntfy URL with a scheme other than https or http" --values "${values}" --set ntfy.url=ftp://ntfy.sh
 expect_rejected "a UI URL with a scheme other than https or http" --values "${values}" --set 'openbao.uiUrl=javascript:alert(1)'
-expect_rejected "an invalid warning" --values "${values}" --set reminders.defaultExpiresWarnBefore=2weeks
+expect_rejected "an invalid warning" --values "${values}" --set reminders.defaultWarnBefore=2weeks
 expect_rejected "a token below the Kubernetes minimum" --values "${values}" --set openbao.auth.tokenExpirationSeconds=300
 expect_rejected "an invalid concurrency policy" --values "${values}" --set concurrencyPolicy=Never
 expect_rejected "an invalid digest" --values "${values}" --set image.digest=latest

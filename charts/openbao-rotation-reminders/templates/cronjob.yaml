@@ -73,8 +73,8 @@ spec:
                     secretKeyRef:
                       name: {{ .Values.ntfy.existingSecret | quote }}
                       key: {{ .Values.ntfy.existingSecretKey | quote }}
-                - name: DEFAULT_EXPIRES_WARN_BEFORE
-                  value: {{ .Values.reminders.defaultExpiresWarnBefore | quote }}
+                - name: DEFAULT_WARN_BEFORE
+                  value: {{ .Values.reminders.defaultWarnBefore | quote }}
               {{- with .Values.resources }}
               resources:
                 {{- toYaml . | nindent 16 }}
