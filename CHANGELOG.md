@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/mcsrobert/openbao-rotation-reminders/compare/v1.0.1...v1.1.0) (2026-11-25)
+
+
+### Features
+
+* **reminder:** default warning lead time to 7d for both deadlines ([590084a](https://github.com/mcsrobert/openbao-rotation-reminders/commit/590084aafd29874563b3d053c9b2846b4fdd9f42))
+
+
+### Bug Fixes
+
+* **container:** update docker.io/library/golang ( c393c00 ➔ 4309855 ) ([#21](https://github.com/mcsrobert/openbao-rotation-reminders/issues/21)) ([4ab308a](https://github.com/mcsrobert/openbao-rotation-reminders/commit/4ab308aa55d435fe5c58a9dc011dd75f91c390c0))
+
 ## [1.0.1](https://github.com/mcsrobert/openbao-rotation-reminders/compare/v1.0.0...v1.0.1) (2026-11-24)
 
 
