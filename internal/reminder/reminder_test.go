@@ -12,7 +12,7 @@ import (
 
 var testNow = time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 
-const testWarn = 14 * 24 * time.Hour
+const testWarn = 7 * 24 * time.Hour
 
 // secret returns metadata JSON for a secret whose current version 1 was
 // created on 2026-03-01 at noon, 92 days before testNow.
@@ -85,19 +85,25 @@ func TestEvaluate(t *testing.T) {
 			want:     &Finding{Severity: SeverityDue, Time: date("2026-05-31T12:00:00Z"), Reasons: []string{"due 2026-05-31 (1d overdue, interval 13w)"}},
 		},
 		{
-			name:     "interval within warn_before",
-			metadata: secret(`{"rotation_interval":"93d","rotation_warn_before":"7d"}`),
+			name:     "interval within the default warning",
+			metadata: secret(`{"rotation_interval":"93d"}`),
 			tracked:  true,
 			want:     &Finding{Severity: SeverityUpcoming, Time: date("2026-06-02T12:00:00Z"), Reasons: []string{"due 2026-06-02 (in 1d, interval 93d)"}},
 		},
 		{
-			name:     "interval before warn_before",
-			metadata: secret(`{"rotation_interval":"100d","rotation_warn_before":"7d"}`),
+			name:     "interval after the default warning",
+			metadata: secret(`{"rotation_interval":"100d"}`),
 			tracked:  true,
 		},
 		{
-			name:     "interval does not warn by default",
-			metadata: secret(`{"rotation_interval":"93d"}`),
+			name:     "interval within a longer warn_before",
+			metadata: secret(`{"rotation_interval":"100d","rotation_warn_before":"14d"}`),
+			tracked:  true,
+			want:     &Finding{Severity: SeverityUpcoming, Time: date("2026-06-09T12:00:00Z"), Reasons: []string{"due 2026-06-09 (in 8d, interval 100d)"}},
+		},
+		{
+			name:     "zero warn_before disables the interval warning",
+			metadata: secret(`{"rotation_interval":"93d","rotation_warn_before":"0d"}`),
 			tracked:  true,
 		},
 		{
@@ -126,9 +132,9 @@ func TestEvaluate(t *testing.T) {
 		},
 		{
 			name:     "expires within the default warning",
-			metadata: secret(`{"expires_at":"2026-06-10"}`),
+			metadata: secret(`{"expires_at":"2026-06-07"}`),
 			tracked:  true,
-			want:     &Finding{Severity: SeverityUpcoming, Time: date("2026-06-10T00:00:00Z"), Reasons: []string{"expires 2026-06-10 (in 8d)"}},
+			want:     &Finding{Severity: SeverityUpcoming, Time: date("2026-06-07T00:00:00Z"), Reasons: []string{"expires 2026-06-07 (in 5d)"}},
 		},
 		{
 			name:     "expiry date is shown in UTC",
@@ -138,7 +144,7 @@ func TestEvaluate(t *testing.T) {
 		},
 		{
 			name:     "expires after the default warning",
-			metadata: secret(`{"expires_at":"2026-06-20"}`),
+			metadata: secret(`{"expires_at":"2026-06-10"}`),
 			tracked:  true,
 		},
 		{
@@ -257,10 +263,10 @@ func TestEvaluate(t *testing.T) {
 		},
 		{
 			name:     "invalid warn_before falls back to the default",
-			metadata: secret(`{"expires_at":"2026-06-10","rotation_warn_before":"two weeks"}`),
+			metadata: secret(`{"expires_at":"2026-06-07","rotation_warn_before":"two weeks"}`),
 			tracked:  true,
-			want: &Finding{Severity: SeverityUpcoming, Time: date("2026-06-10T00:00:00Z"), Reasons: []string{
-				"expires 2026-06-10 (in 8d)",
+			want: &Finding{Severity: SeverityUpcoming, Time: date("2026-06-07T00:00:00Z"), Reasons: []string{
+				"expires 2026-06-07 (in 5d)",
 				`metadata error: rotation_warn_before: invalid duration "two weeks" (use e.g. 80d, 12w, 24h)`,
 			}},
 		},

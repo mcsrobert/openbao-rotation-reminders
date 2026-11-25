@@ -23,7 +23,7 @@ Set these keys in a secret's `custom_metadata`:
 | --- | --- |
 | `rotation_interval` | Positive duration, such as `90d`, measured from the current version's `created_time` |
 | `expires_at` | Fixed expiry: `YYYY-MM-DD` (midnight UTC) or an RFC 3339 timestamp with a time zone offset |
-| `rotation_warn_before` | Optional lead time, `0` allowed. Defaults to `DEFAULT_EXPIRES_WARN_BEFORE` (`14d`) for `expires_at` and `0` for `rotation_interval` |
+| `rotation_warn_before` | Optional lead time, `0` allowed. Defaults to `DEFAULT_WARN_BEFORE` (`7d`) |
 | `rotation_note` | Optional instructions shown in the digest. Whitespace is collapsed |
 
 Durations are a whole number followed by `h` (hours), `d` (days) or `w`
@@ -101,7 +101,7 @@ The job reads environment variables. Unset and empty variables are the same.
 | `OPENBAO_UI_URL` | | Opened when the notification is tapped |
 | `NTFY_URL` | `https://ntfy.sh` | ntfy server |
 | `NTFY_TOPIC` | required | Private topic: 1 to 64 letters, digits, `-` or `_`, and not a reserved ntfy name |
-| `DEFAULT_EXPIRES_WARN_BEFORE` | `14d` | Default lead time for `expires_at`, `0d` allowed |
+| `DEFAULT_WARN_BEFORE` | `7d` | Default lead time before a deadline, `0d` allowed |
 
 Anyone who knows the topic can read and publish to it, so treat it as a
 secret. It never appears in output.

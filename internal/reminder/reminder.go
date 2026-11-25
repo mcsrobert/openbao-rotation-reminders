@@ -58,7 +58,7 @@ var errInactive = errors.New("the current version is not active")
 //
 // Secrets whose current version is deleted or destroyed, or that have no
 // version, are not tracked.
-func Evaluate(key string, metadata *openbao.Metadata, now time.Time, defaultExpiresWarnBefore time.Duration) (bool, *Finding) {
+func Evaluate(key string, metadata *openbao.Metadata, now time.Time, defaultWarnBefore time.Duration) (bool, *Finding) {
 	custom, err := customMetadata(metadata.CustomMetadata)
 	if err != nil {
 		return true, invalid(key, now, []string{err.Error()}, "")
@@ -99,19 +99,13 @@ func Evaluate(key string, metadata *openbao.Metadata, now time.Time, defaultExpi
 		return true, invalid(key, now, errs, note)
 	}
 
-	var warnOverride *time.Duration
+	lead := defaultWarnBefore
 	if hasWarnBefore {
 		if parsed, err := ParseDuration(warnBefore, true); err != nil {
 			errs = append(errs, "rotation_warn_before: "+err.Error())
 		} else {
-			warnOverride = &parsed
+			lead = parsed
 		}
-	}
-	warn := func(fallback time.Duration) time.Duration {
-		if warnOverride != nil {
-			return *warnOverride
-		}
-		return fallback
 	}
 
 	finding := &Finding{Key: key, Note: note}
@@ -135,7 +129,7 @@ func Evaluate(key string, metadata *openbao.Metadata, now time.Time, defaultExpi
 			switch {
 			case !now.Before(expires):
 				record(SeverityExpired, expires, fmt.Sprintf("expired %s (%s ago)", date, FormatDelta(now.Sub(expires))))
-			case !now.Before(expires.Add(-warn(defaultExpiresWarnBefore))):
+			case lead > 0 && !now.Before(expires.Add(-lead)):
 				record(SeverityUpcoming, expires, fmt.Sprintf("expires %s (in %s)", date, FormatDelta(expires.Sub(now))))
 			}
 		}
@@ -148,7 +142,6 @@ func Evaluate(key string, metadata *openbao.Metadata, now time.Time, defaultExpi
 			due := created.Add(parsed)
 			date := formatDate(due)
 			label := strings.TrimSpace(interval)
-			lead := warn(0)
 			switch {
 			case !now.Before(due):
 				record(SeverityDue, due, fmt.Sprintf("due %s (%s overdue, interval %s)", date, FormatDelta(now.Sub(due)), label))

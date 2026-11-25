@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	defaultJWTFile           = "/var/run/secrets/openbao/token"
-	defaultNtfyURL           = "https://ntfy.sh"
-	defaultExpiresWarnBefore = "14d"
+	defaultJWTFile    = "/var/run/secrets/openbao/token"
+	defaultNtfyURL    = "https://ntfy.sh"
+	defaultWarnBefore = "7d"
 )
 
 // topicPattern is the topic name ntfy accepts for publishing.
@@ -22,15 +22,15 @@ var topicPattern = regexp.MustCompile(`^[-_A-Za-z0-9]{1,64}$`)
 
 // Config is the configuration of one run.
 type Config struct {
-	OpenBaoAddress           string
-	OpenBaoMount             string
-	Role                     string
-	CAFile                   string
-	JWTFile                  string
-	UIURL                    string
-	NtfyURL                  string
-	NtfyTopic                string
-	DefaultExpiresWarnBefore time.Duration
+	OpenBaoAddress    string
+	OpenBaoMount      string
+	Role              string
+	CAFile            string
+	JWTFile           string
+	UIURL             string
+	NtfyURL           string
+	NtfyTopic         string
+	DefaultWarnBefore time.Duration
 }
 
 // Load reads the configuration with getenv. Unset and empty variables are
@@ -75,9 +75,9 @@ func Load(getenv func(string) string) (*Config, error) {
 	} else if isReservedTopic(cfg.NtfyTopic) {
 		errs = append(errs, "NTFY_TOPIC must not be a reserved ntfy topic name")
 	}
-	warn, err := reminder.ParseDuration(get("DEFAULT_EXPIRES_WARN_BEFORE", defaultExpiresWarnBefore), true)
-	add("DEFAULT_EXPIRES_WARN_BEFORE", err)
-	cfg.DefaultExpiresWarnBefore = warn
+	warn, err := reminder.ParseDuration(get("DEFAULT_WARN_BEFORE", defaultWarnBefore), true)
+	add("DEFAULT_WARN_BEFORE", err)
+	cfg.DefaultWarnBefore = warn
 
 	if len(errs) > 0 {
 		return nil, errors.New(strings.Join(errs, "; "))

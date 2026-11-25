@@ -229,7 +229,7 @@ func TestRunPublishesADigest(t *testing.T) {
 	bao := newFakeBao(t, map[string]string{
 		"app/expired":     custom(`{"expires_at":"2026-05-01"}`),
 		"app/due":         custom(`{"rotation_interval":"90d","rotation_note":"Regenerate in\n the console"}`),
-		"app/soon":        custom(`{"expires_at":"2026-06-10"}`),
+		"app/soon":        custom(`{"expires_at":"2026-06-07"}`),
 		"app/typo":        custom(`{"rotation_intervall":"90d"}`),
 		"app/fine":        custom(`{"rotation_interval":"180d"}`),
 		"other/untracked": custom(`{"owner":"me"}`),
@@ -247,7 +247,7 @@ DUE FOR ROTATION:
   Note: Regenerate in the console
 
 EXPIRING SOON:
-- app/soon: expires 2026-06-10 (in 8d)
+- app/soon: expires 2026-06-07 (in 5d)
 
 INVALID METADATA:
 - app/typo: metadata error: unknown metadata key "rotation_intervall"`

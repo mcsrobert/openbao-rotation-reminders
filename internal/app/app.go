@@ -131,7 +131,7 @@ func scan(ctx context.Context, cfg *config.Config, bao *openbao.Client, now time
 		if metadata == nil {
 			continue
 		}
-		tracked, finding := reminder.Evaluate(key, metadata, now, cfg.DefaultExpiresWarnBefore)
+		tracked, finding := reminder.Evaluate(key, metadata, now, cfg.DefaultWarnBefore)
 		if tracked {
 			r.tracked++
 		}

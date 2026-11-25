@@ -37,7 +37,7 @@ ntfy:
   existingSecretKey: NTFY_TOPIC
 
 reminders:
-  defaultExpiresWarnBefore: 14d
+  defaultWarnBefore: 7d
 
 serviceAccount:
   create: true
